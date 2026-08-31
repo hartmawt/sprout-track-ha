@@ -71,8 +71,24 @@ Element.prototype.setAttribute=function(n,v){
 // literals, so variables and external URLs stay untouched.
 const NAVIGATION = /(\.location\s*\.\s*(?:href|assign|replace)\s*[=(]\s*)(["'`])\/(?!\/)/g;
 
+// The app derives the family slug from the first path segment, which under
+// ingress is "api" rather than the family. Both forms are redirected to a
+// helper that skips the prefix, so the slug and every path built from it match
+// what the app sees without ingress.
+const SLUG_FROM_PATH = /location\.pathname\.split\("\/"\)(\.filter\(Boolean\)\[0\]|\[1\])/g;
+
+const SLUG_HELPER = `<script>(function(){
+var b=${JSON.stringify(BASE_PATH)};
+window.__haPath=function(){
+  var p=location.pathname;
+  return b&&p.indexOf(b)===0?p.slice(b.length)||'/':p;
+};
+})();</script>`;
+
 function rewriteNavigation(body) {
-  return body.replace(NAVIGATION, (_, prefix, quote) => `${prefix}${quote}${BASE_PATH}/`);
+  return body
+    .replace(NAVIGATION, (_, prefix, quote) => `${prefix}${quote}${BASE_PATH}/`)
+    .replace(SLUG_FROM_PATH, (_, tail) => `__haPath().split("/")${tail}`);
 }
 
 function proxy(req, res) {
@@ -100,7 +116,7 @@ function proxy(req, res) {
       up.on('data', (c) => chunks.push(c));
       up.on('end', () => {
         let body = rewriteNavigation(Buffer.concat(chunks).toString('utf8'));
-        if (isHtml) body = body.replace(/<head([^>]*)>/i, (m) => m + SHIM);
+        if (isHtml) body = body.replace(/<head([^>]*)>/i, (m) => m + SLUG_HELPER + SHIM);
         delete headers['content-length'];
         res.writeHead(up.statusCode || 200, headers);
         res.end(body);
