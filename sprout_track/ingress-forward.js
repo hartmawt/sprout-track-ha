@@ -90,13 +90,30 @@ function upstreamPath(url) {
   return url === '/' ? BASE_PATH : BASE_PATH + url;
 }
 
+// next/image passes the source through a url parameter and fetches it back from
+// the app without applying basePath, so an unprefixed value resolves to a route
+// the app does not serve and the optimizer reports the image as invalid.
+// The Supervisor decodes the query string, so the source arrives as a literal
+// slash rather than %2F and both spellings have to be recognised.
+const IMAGE_SOURCE = /([?&]url=)((?:%2F|\/)(?!%2F|\/)[^&]*)/;
+
+function prefixImageSource(url) {
+  if (!BASE_PATH) return url;
+  const path = url.startsWith(BASE_PATH) ? url.slice(BASE_PATH.length) : url;
+  if (!path.startsWith('/_next/image')) return url;
+  return url.replace(IMAGE_SOURCE, (match, key, value) => {
+    const decoded = value.startsWith('%2F') ? decodeURIComponent(value) : value;
+    return decoded.startsWith(BASE_PATH) ? match : `${key}${BASE_PATH}${decoded}`;
+  });
+}
+
 function proxy(req, res) {
   const upstream = http.request(
     {
       host: '127.0.0.1',
       port: APP_PORT,
       method: req.method,
-      path: upstreamPath(req.url || '/'),
+      path: upstreamPath(prefixImageSource(req.url || '/')),
       headers: { ...req.headers, 'accept-encoding': 'identity' },
     },
     (up) => {

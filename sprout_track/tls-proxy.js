@@ -29,14 +29,30 @@ function readCert() {
 }
 
 // The app is built and started under the ingress path as its basePath, so it
-// only routes prefixed paths even on this port. Direct visitors ask for bare
-// ones, so the prefix is added here and stripped again in the browser by the
-// pathname override the ingress page injects.
+// only routes prefixed paths even on this port, while direct visitors ask for
+// bare ones.
 const BASE_PATH = (process.env.INGRESS_BASE_PATH || '').replace(/\/$/, '');
 
 function upstreamPath(url) {
   if (!BASE_PATH || url.startsWith(BASE_PATH)) return url;
   return url === '/' ? BASE_PATH : BASE_PATH + url;
+}
+
+// next/image fetches the source in its url parameter back from the app without
+// applying basePath, so an unprefixed value misses the route and the optimizer
+// rejects the image.
+// Proxies may decode the query string, so the source can arrive as a literal
+// slash rather than %2F and both spellings have to be recognised.
+const IMAGE_SOURCE = /([?&]url=)((?:%2F|\/)(?!%2F|\/)[^&]*)/;
+
+function prefixImageSource(url) {
+  if (!BASE_PATH) return url;
+  const path = url.startsWith(BASE_PATH) ? url.slice(BASE_PATH.length) : url;
+  if (!path.startsWith('/_next/image')) return url;
+  return url.replace(IMAGE_SOURCE, (match, key, value) => {
+    const decoded = value.startsWith('%2F') ? decodeURIComponent(value) : value;
+    return decoded.startsWith(BASE_PATH) ? match : `${key}${BASE_PATH}${decoded}`;
+  });
 }
 
 
@@ -46,7 +62,7 @@ function forward(req, res) {
       host: '127.0.0.1',
       port: APP_PORT,
       method: req.method,
-      path: upstreamPath(req.url || '/'),
+      path: upstreamPath(prefixImageSource(req.url || '/')),
       headers: { ...req.headers, 'x-forwarded-proto': 'https' },
     },
     (up) => {
