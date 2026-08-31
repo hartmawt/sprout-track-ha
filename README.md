@@ -54,25 +54,31 @@ Click **Save**.
 1. Go to the **Info** tab and click **Start**
 2. Optionally enable **Start on boot** and **Watchdog**
 3. Watch the **Log** tab — first start runs database migrations and seeding, so give it a minute
-4. Click **Open Web UI**, or browse to `http://<your-home-assistant-ip>:3000`
+4. Click **Sprout Track** in the sidebar, **Open Web UI**, or browse to `http://<your-home-assistant-ip>:3000`
 
-Create your family and caretaker accounts on first visit.
+### 5. First run — the default PIN
 
-### 5. Add it to your dashboard (optional)
+On first visit the app asks for a **family security PIN** before running its setup wizard.
 
-This add-on does not use Ingress ([see below](#why-ingress-is-not-used)), so Home Assistant does not offer a **Show in sidebar** toggle for it. That toggle only exists for Ingress add-ons.
+| | |
+| --- | --- |
+| **Default PIN** | `111222` |
+| **Login ID** (only if prompted) | `00` |
+| **Default family** | "My Family", at `/my-family` |
 
-The closest equivalent is a **Webpage card**, which embeds Sprout Track in a dashboard:
+The setup wizard then walks you through naming your family, choosing your own PIN (or adding individual caretakers with their own PINs), and adding your baby.
 
-1. Open a dashboard → **Edit** → **Add card** → search for **Webpage**
-2. Set the URL to `http://192.168.1.50:3000` (use your Home Assistant machine's address)
-3. Save
-
-To make it a full-page sidebar item, create a new dashboard (**Settings → Dashboards → Add dashboard**), enable **Show in sidebar**, and put a single Webpage card in it set to panel mode.
-
-> The older `panel_iframe` integration was previously used for this. **It has been removed from Home Assistant** — use a Webpage card instead.
+> **Change the PIN immediately** — `111222` is a published default. In the app: **Settings gear → Change PIN**. PINs are 6–10 digits, numbers only.
 >
-> If you access Home Assistant over HTTPS, browsers block embedded `http://` pages as mixed content, so the card will appear blank. In that case use the **Open Web UI** button on the add-on page, which opens in a new tab.
+> **Three wrong attempts locks your IP out for 5 minutes**, so don't guess.
+
+### 6. Sidebar entry
+
+The add-on registers a **Sprout Track** entry in the Home Assistant sidebar, controlled by the **Show in sidebar** toggle on the add-on's Info page.
+
+Clicking it sends you to the app on port 3000. It does not run *inside* Home Assistant — see [Why Ingress is not used](#why-ingress-is-not-used) for the reason — so the sidebar entry is a handoff rather than an embedded page.
+
+> **This works when you reach Home Assistant on your local network.** If you connect remotely through Nabu Casa, the sidebar entry points at a `:3000` address your browser cannot reach from outside the LAN. Remote access needs your own reverse proxy or VPN.
 
 ## Accounts and security
 
@@ -100,7 +106,11 @@ The secrets in `/data/env` are generated once on first start and reused. They ar
 
 **The add-on doesn't appear after adding the repository.** Refresh the Add-on Store page, or reload the browser. It appears under its own "Sprout Track Add-on Repository" heading, not in the official list.
 
-**There's no "Show in sidebar" toggle.** That toggle only appears for Ingress add-ons, and this add-on cannot use Ingress ([why](#why-ingress-is-not-used)). Use a Webpage card instead — see [Add it to your dashboard](#5-add-it-to-your-dashboard-optional).
+**It asks for a PIN and I don't have one.** The default is `111222`. Change it right away under **Settings → Change PIN**.
+
+**I'm locked out.** Three wrong PIN attempts locks your IP for 5 minutes. Wait it out — the lockout clears on its own.
+
+**The sidebar entry doesn't load.** It hands off to `http://<ha-host>:3000`. That address has to be reachable from your browser, so it won't work over a Nabu Casa remote connection. Use it on your local network, or reach the app directly.
 
 **Add-on won't start, or first run seems stuck.** Check the **Log** tab. The first start runs migrations and seeding, which is slow on low-powered hardware.
 
@@ -114,11 +124,15 @@ The secrets in `/data/env` are generated once on first start and reused. They ar
 
 ## Why Ingress is not used
 
-Home Assistant's Ingress feature (which provides the sidebar entry and single sign-on) serves add-ons from a randomly generated URL prefix that changes every session.
+Home Assistant's Ingress feature serves add-ons from a randomly generated URL prefix that changes every session.
 
-Sprout Track is a Next.js application. Next.js requires its URL prefix (`basePath`) to be fixed when the app is **compiled** and inlines it into the client bundles, so it cannot adapt to a prefix only known at runtime. Under Ingress, the app's requests for `/_next/...` and `/api/...` would resolve against the Home Assistant root and never reach the add-on. Supporting it would require rewriting roughly 226 fetch calls and 87 redirects across 135+ upstream files and permanently forking the project.
+Sprout Track is a Next.js application. Next.js requires its URL prefix (`basePath`) to be fixed when the app is **compiled** and inlines it into the client bundles, so it cannot adapt to a prefix only known at runtime. Served through Ingress, the app's requests for `/_next/...` and `/api/...` would resolve against the Home Assistant root and never reach the add-on. Supporting it properly would mean rewriting roughly 226 fetch calls and 87 redirects across 135+ upstream files and permanently forking the project.
 
-Direct port access avoids all of this and lets the add-on run the official, unmodified Sprout Track image. This becomes straightforward if upstream ever adds `basePath` support.
+The app therefore runs on port 3000 and is not proxied through Ingress.
+
+Home Assistant only offers the **Show in sidebar** toggle to add-ons that declare `ingress: true`, so the add-on enables it and serves a small page on the Ingress port whose only job is to send the browser to port 3000. That page navigates the top-level window rather than embedding the app, because a browser will not load an `http://` page inside an iframe on an `https://` dashboard, but will follow a top-level link to one. The target address is taken from the incoming request, so nothing is hardcoded.
+
+If upstream ever adds `basePath` support, real Ingress becomes straightforward and the redirect can be dropped.
 
 ## How it works
 

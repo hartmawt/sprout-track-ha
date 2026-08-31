@@ -10,9 +10,27 @@ This add-on packages the upstream [Sprout Track](https://github.com/Oak-and-Spro
 2. Add this repository's URL.
 3. Install **Sprout Track**.
 4. Set your timezone in the **Configuration** tab.
-5. Start the add-on, then click **Open Web UI**.
+5. Start the add-on, then click **Sprout Track** in the sidebar or **Open Web UI**.
 
 First start takes a minute — the add-on runs database migrations and seeds initial data.
+
+## First run — the default PIN
+
+The app asks for a **family security PIN** before running its setup wizard.
+
+| | |
+| --- | --- |
+| **Default PIN** | `111222` |
+| **Login ID** (only if prompted) | `00` |
+| **Default family** | "My Family", at `/my-family` |
+
+The wizard then walks you through naming your family, choosing your own PIN (or adding individual caretakers with their own PINs), and adding your baby.
+
+> **Change the PIN immediately** — `111222` is a published default. In the app: **Settings gear → Change PIN**. PINs are 6–10 digits, numbers only.
+>
+> **Three wrong attempts locks your IP out for 5 minutes.** Wait it out; it clears on its own.
+
+The PIN is stored in the app's own database, so it is not a Home Assistant add-on option and does not appear in the **Configuration** tab.
 
 ## Configuration
 
@@ -27,24 +45,15 @@ First start takes a minute — the add-on runs database migrations and seeds ini
 
 Open the web UI at `http://<home-assistant-ip>:3000`, or use the **Open Web UI** button on the add-on page.
 
-### Why there is no sidebar entry
+### The sidebar entry
 
-Home Assistant's Ingress feature (which provides the sidebar entry and single sign-on) serves add-ons from a randomly generated URL prefix that changes every session.
+The add-on adds a **Sprout Track** entry to the sidebar, controlled by the **Show in sidebar** toggle on the Info page. Clicking it sends you to the app on port 3000.
 
-Sprout Track is a Next.js application. Next.js requires its URL prefix (`basePath`) to be fixed when the app is **compiled**, and bakes it into the JavaScript bundles. It cannot be told about a prefix that is only known at runtime. Under Ingress, the app's requests for `/_next/...` and `/api/...` would be sent to Home Assistant itself instead of to the add-on, and nothing would load.
+The app is not proxied through Home Assistant. Ingress serves add-ons from a randomly generated URL prefix that changes every session, and Next.js requires its URL prefix (`basePath`) to be fixed when the app is compiled — it bakes it into the JavaScript bundles. Served through Ingress, requests for `/_next/...` and `/api/...` would go to Home Assistant instead of the add-on and nothing would load.
 
-Direct port access avoids this entirely and lets the add-on run the official, unmodified Sprout Track image.
+Home Assistant only offers the sidebar toggle to Ingress add-ons, so the add-on enables Ingress and serves a small page on the Ingress port that hands the browser off to port 3000. It navigates the top-level window instead of embedding the app, because browsers refuse to load an `http://` page inside an iframe on an `https://` dashboard but will follow a top-level link to one.
 
-Because Home Assistant only offers the **Show in sidebar** toggle for Ingress add-ons, this add-on does not have one. To get something equivalent, add a **Webpage card** pointing at `http://<your-home-assistant-ip>:3000`:
-
-1. Open a dashboard → **Edit** → **Add card** → search for **Webpage**
-2. Set the URL and save
-
-For a full sidebar item, create a new dashboard under **Settings → Dashboards**, enable **Show in sidebar**, and give it a single Webpage card in panel mode.
-
-> The older `panel_iframe` integration has been **removed from Home Assistant**; use a Webpage card instead.
->
-> If you reach Home Assistant over HTTPS, browsers block embedded `http://` pages as mixed content and the card will render blank. Use the **Open Web UI** button in that case.
+> The sidebar entry points at `http://<your-home-assistant-host>:3000`, which your browser must be able to reach. That holds on your local network, but not over a Nabu Casa remote connection — remote access needs your own reverse proxy or a VPN.
 
 ## Accounts and security
 
@@ -74,7 +83,11 @@ If something else on your Home Assistant machine already uses port 3000, change 
 
 **Add-on won't start / stuck on first run.** Check the **Log** tab. First start runs migrations and seeding, which is slow on low-powered hardware — give it a few minutes.
 
-**There's no "Show in sidebar" toggle.** Expected — that toggle only exists for Ingress add-ons. See [Why there is no sidebar entry](#why-there-is-no-sidebar-entry).
+**It asks for a PIN.** The default is `111222` — change it under **Settings → Change PIN**.
+
+**Locked out.** Three wrong PIN attempts locks your IP for 5 minutes; it clears by itself.
+
+**The sidebar entry doesn't load.** It hands off to `http://<ha-host>:3000`, which must be reachable from your browser. That won't work over a Nabu Casa remote connection.
 
 **Timestamps are wrong.** Set `timezone` to your local timezone and restart.
 

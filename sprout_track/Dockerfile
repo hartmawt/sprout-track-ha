@@ -4,6 +4,7 @@ FROM ${BUILD_FROM}
 RUN apk add --no-cache jq
 
 COPY run.sh /usr/local/bin/ha-run.sh
+COPY ingress-redirect.js /usr/local/bin/ingress-redirect.js
 RUN sed -i 's/\r$//' /usr/local/bin/ha-run.sh && \
     chmod +x /usr/local/bin/ha-run.sh
 
