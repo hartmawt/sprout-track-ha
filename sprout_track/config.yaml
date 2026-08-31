@@ -28,8 +28,10 @@ boot: auto
 
 ports:
   3000/tcp: 3000
+  3443/tcp: 3443
 ports_description:
-  3000/tcp: "Sprout Track web interface"
+  3000/tcp: "Sprout Track web interface (HTTP)"
+  3443/tcp: "Sprout Track web interface (HTTPS, used by the sidebar)"
 
 # /data is the add-on's persistent volume; it is included in Home Assistant
 # backups. The databases, generated secrets, and uploads all live there.

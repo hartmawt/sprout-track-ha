@@ -14,7 +14,8 @@ const fs = require('fs');
 const http = require('http');
 const https = require('https');
 
-const LISTEN_PORT = Number(process.env.TLS_LISTEN_PORT) || 3000;
+const LISTEN_PORT = Number(process.env.HTTP_LISTEN_PORT) || 3000;
+const TLS_PORT = Number(process.env.HTTPS_LISTEN_PORT) || 3443;
 const APP_PORT = Number(process.env.APP_INTERNAL_PORT) || 3001;
 const CERT = process.env.SSL_CERTFILE || '/ssl/fullchain.pem';
 const KEY = process.env.SSL_KEYFILE || '/ssl/privkey.pem';
@@ -71,17 +72,26 @@ function upgrade(req, socket) {
   up.end();
 }
 
-const creds = readCert();
-let server;
+function listen(server, port, label) {
+  server.on('upgrade', upgrade);
+  server.on('error', (err) => console.error(`[tls] cannot bind ${port}: ${err.message}`));
+  server.listen(port, '0.0.0.0', () => console.log(`[tls] ${label} on ${port} -> 127.0.0.1:${APP_PORT}`));
+}
 
+// Plain HTTP stays on the published port so the app keeps working over an IP
+// address, where a certificate issued for a hostname would not match. HTTPS is
+// served alongside it, on its own port, for embedding in an HTTPS dashboard.
+listen(http.createServer(forward), LISTEN_PORT, 'HTTP');
+
+const creds = readCert();
 if (creds) {
-  server = https.createServer(creds, forward);
+  const secure = https.createServer(creds, forward);
   for (const file of [CERT, KEY]) {
     try {
       fs.watchFile(file, { interval: 60000 }, () => {
         const next = readCert();
         if (next) {
-          server.setSecureContext(next);
+          secure.setSecureContext(next);
           console.log('[tls] certificate reloaded');
         }
       });
@@ -89,12 +99,7 @@ if (creds) {
       /* watching is best effort */
     }
   }
-  console.log(`[tls] HTTPS on ${LISTEN_PORT} -> 127.0.0.1:${APP_PORT}`);
+  listen(secure, TLS_PORT, 'HTTPS');
 } else {
-  server = http.createServer(forward);
-  console.log(`[tls] no certificate at ${CERT}; serving HTTP on ${LISTEN_PORT}`);
+  console.log(`[tls] no certificate at ${CERT}; HTTPS disabled, sidebar will link out`);
 }
-
-server.on('upgrade', upgrade);
-server.on('error', (err) => console.error(`[tls] cannot bind ${LISTEN_PORT}: ${err.message}`));
-server.listen(LISTEN_PORT, '0.0.0.0');

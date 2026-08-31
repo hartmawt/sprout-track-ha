@@ -82,17 +82,20 @@ export LOG_DATABASE_URL="file:${DATA_DB}/baby-tracker-logs.db"
 
 echo "Sprout Track: timezone=${TIMEZONE}, data=/data"
 
-# The app moves to an internal port so the published port can serve HTTPS: the
-# sidebar frames the app, and a frame on an HTTPS dashboard cannot load HTTP.
+# The app listens internally while port 3000 keeps serving plain HTTP, so access
+# by IP address still works. HTTPS is offered alongside it on its own port for
+# the sidebar, which cannot frame an HTTP page on an HTTPS dashboard.
 APP_INTERNAL_PORT=3001
-APP_PUBLIC_PORT=3000
+APP_HTTP_PORT=3000
+APP_HTTPS_PORT=3443
 set_env PORT "$APP_INTERNAL_PORT"
 export PORT="$APP_INTERNAL_PORT"
 
-TLS_LISTEN_PORT="$APP_PUBLIC_PORT" APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
+HTTP_LISTEN_PORT="$APP_HTTP_PORT" HTTPS_LISTEN_PORT="$APP_HTTPS_PORT" \
+    APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
     node /usr/local/bin/tls-proxy.js &
 
-INGRESS_PORT=8099 APP_PUBLIC_PORT="$APP_PUBLIC_PORT" \
+INGRESS_PORT=8099 APP_HTTPS_PORT="$APP_HTTPS_PORT" \
     node /usr/local/bin/ingress-page.js &
 
 exec /usr/local/bin/docker-startup.sh npm start

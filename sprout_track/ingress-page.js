@@ -17,7 +17,7 @@
 const http = require('http');
 
 const PORT = Number(process.env.INGRESS_PORT) || 8099;
-const APP_PORT = Number(process.env.APP_PUBLIC_PORT) || 3000;
+const APP_PORT = Number(process.env.APP_HTTPS_PORT) || 3443;
 
 function page(appPort) {
   return `<!DOCTYPE html>
