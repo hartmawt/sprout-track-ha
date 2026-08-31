@@ -35,17 +35,16 @@ Sprout Track is a Next.js application. Next.js requires its URL prefix (`basePat
 
 Direct port access avoids this entirely and lets the add-on run the official, unmodified Sprout Track image.
 
-To add a sidebar entry anyway, put this in your `configuration.yaml` and restart Home Assistant:
+Because Home Assistant only offers the **Show in sidebar** toggle for Ingress add-ons, this add-on does not have one. To get something equivalent, add a **Webpage card** pointing at `http://<your-home-assistant-ip>:3000`:
 
-```yaml
-panel_iframe:
-  sprout_track:
-    title: "Sprout Track"
-    icon: mdi:baby-carriage
-    url: "http://192.168.1.50:3000"
-```
+1. Open a dashboard → **Edit** → **Add card** → search for **Webpage**
+2. Set the URL and save
 
-Use your Home Assistant machine's IP address. Note that if you access Home Assistant over HTTPS, browsers will block an `http://` iframe — in that case use the **Open Web UI** button instead, which opens in a new tab.
+For a full sidebar item, create a new dashboard under **Settings → Dashboards**, enable **Show in sidebar**, and give it a single Webpage card in panel mode.
+
+> The older `panel_iframe` integration has been **removed from Home Assistant**; use a Webpage card instead.
+>
+> If you reach Home Assistant over HTTPS, browsers block embedded `http://` pages as mixed content and the card will render blank. Use the **Open Web UI** button in that case.
 
 ## Accounts and security
 
@@ -74,6 +73,8 @@ If something else on your Home Assistant machine already uses port 3000, change 
 ## Troubleshooting
 
 **Add-on won't start / stuck on first run.** Check the **Log** tab. First start runs migrations and seeding, which is slow on low-powered hardware — give it a few minutes.
+
+**There's no "Show in sidebar" toggle.** Expected — that toggle only exists for Ingress add-ons. See [Why there is no sidebar entry](#why-there-is-no-sidebar-entry).
 
 **Timestamps are wrong.** Set `timezone` to your local timezone and restart.
 

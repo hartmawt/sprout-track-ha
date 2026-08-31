@@ -26,26 +26,35 @@ set_env() {
     return 0
 }
 
-mkdir -p "$DATA_DB" "$DATA_ENV" "$DATA_FILES"
+# /db, /app/env and /app/Files are VOLUME mount points in the upstream image, so
+# the directories themselves cannot be replaced (rm fails with EBUSY). Persist
+# data by pointing the database at /data through environment variables and by
+# linking files and subdirectories *inside* the mounts, never the mounts.
+mkdir -p "$DATA_DB" "$DATA_ENV" "$DATA_FILES/photos" "$DATA_FILES/feedback"
 
-if [ ! -f "$ENV_FILE" ] && [ -f /app/env/.env ] && [ ! -L /app/env ]; then
+if [ ! -e "$ENV_FILE" ] && [ -f /app/env/.env ] && [ ! -L /app/env/.env ]; then
     cp /app/env/.env "$ENV_FILE"
 fi
+if [ ! -L /app/env/.env ]; then
+    rm -f /app/env/.env
+    ln -s "$ENV_FILE" /app/env/.env
+fi
 
-# Redirect the image's volume paths onto /data, which Home Assistant persists
-# and includes in backups.
-if [ ! -L /app/env ]; then
-    rm -rf /app/env
-    ln -s "$DATA_ENV" /app/env
-fi
-if [ ! -L /db ]; then
-    rm -rf /db
-    ln -s "$DATA_DB" /db
-fi
-if [ ! -L /app/Files ]; then
-    rm -rf /app/Files
-    ln -s "$DATA_FILES" /app/Files
-fi
+for sub in photos feedback; do
+    if [ ! -L "/app/Files/${sub}" ]; then
+        rm -rf "/app/Files/${sub}"
+        ln -s "${DATA_FILES}/${sub}" "/app/Files/${sub}"
+    fi
+done
+
+# Vaccine documents are written to the Files root rather than a subdirectory,
+# so each one is relocated to /data and linked back individually.
+for f in /app/Files/*.enc; do
+    [ -f "$f" ] || continue
+    [ -L "$f" ] && continue
+    mv "$f" "${DATA_FILES}/$(basename "$f")"
+    ln -s "${DATA_FILES}/$(basename "$f")" "$f"
+done
 
 TIMEZONE=$(option timezone)
 [ -z "$TIMEZONE" ] && TIMEZONE="${TZ:-UTC}"
@@ -64,6 +73,12 @@ else
 fi
 
 set_env APP_URL "$(option app_url)"
+
+# docker-startup.sh re-applies these after sourcing the env file, so exporting
+# them wins and keeps the databases on /data rather than the container layer.
+export DATABASE_PROVIDER="sqlite"
+export DATABASE_URL="file:${DATA_DB}/baby-tracker.db"
+export LOG_DATABASE_URL="file:${DATA_DB}/baby-tracker-logs.db"
 
 echo "Sprout Track: timezone=${TIMEZONE}, data=/data"
 

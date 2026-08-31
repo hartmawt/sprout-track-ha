@@ -58,21 +58,21 @@ Click **Save**.
 
 Create your family and caretaker accounts on first visit.
 
-### 5. Add a sidebar entry (optional)
+### 5. Add it to your dashboard (optional)
 
-This add-on does not use Ingress ([see below](#why-ingress-is-not-used)), so it has no sidebar entry by default. To add one, put this in `configuration.yaml` and restart Home Assistant:
+This add-on does not use Ingress ([see below](#why-ingress-is-not-used)), so Home Assistant does not offer a **Show in sidebar** toggle for it. That toggle only exists for Ingress add-ons.
 
-```yaml
-panel_iframe:
-  sprout_track:
-    title: "Sprout Track"
-    icon: mdi:baby-carriage
-    url: "http://192.168.1.50:3000"
-```
+The closest equivalent is a **Webpage card**, which embeds Sprout Track in a dashboard:
 
-Replace the IP with your Home Assistant machine's address.
+1. Open a dashboard → **Edit** → **Add card** → search for **Webpage**
+2. Set the URL to `http://192.168.1.50:3000` (use your Home Assistant machine's address)
+3. Save
 
-> If you access Home Assistant over HTTPS, browsers block `http://` iframes as mixed content. Use the **Open Web UI** button instead, which opens in a new tab.
+To make it a full-page sidebar item, create a new dashboard (**Settings → Dashboards → Add dashboard**), enable **Show in sidebar**, and put a single Webpage card in it set to panel mode.
+
+> The older `panel_iframe` integration was previously used for this. **It has been removed from Home Assistant** — use a Webpage card instead.
+>
+> If you access Home Assistant over HTTPS, browsers block embedded `http://` pages as mixed content, so the card will appear blank. In that case use the **Open Web UI** button on the add-on page, which opens in a new tab.
 
 ## Accounts and security
 
@@ -100,6 +100,8 @@ The secrets in `/data/env` are generated once on first start and reused. They ar
 
 **The add-on doesn't appear after adding the repository.** Refresh the Add-on Store page, or reload the browser. It appears under its own "Sprout Track Add-on Repository" heading, not in the official list.
 
+**There's no "Show in sidebar" toggle.** That toggle only appears for Ingress add-ons, and this add-on cannot use Ingress ([why](#why-ingress-is-not-used)). Use a Webpage card instead — see [Add it to your dashboard](#5-add-it-to-your-dashboard-optional).
+
 **Add-on won't start, or first run seems stuck.** Check the **Log** tab. The first start runs migrations and seeding, which is slow on low-powered hardware.
 
 **Timestamps are wrong.** Set `timezone` and restart.
@@ -125,7 +127,7 @@ The add-on builds **on top of the official `sprouttrack/sprout-track` image** ra
 `run.sh` does two things before handing off to the upstream entrypoint:
 
 1. **Applies add-on options.** Upstream's `docker-startup.sh` sources its persisted `.env` with `set -a`, which overrides exported environment variables. Options are therefore written into that file rather than exported, while leaving the auto-generated `ENC_HASH` and `JWT_SECRET` untouched so logins and encrypted data survive restarts.
-2. **Redirects storage to `/data`.** The image's `/db`, `/app/env`, and `/app/Files` volumes are symlinked into `/data`, the volume Home Assistant persists and backs up.
+2. **Redirects storage to `/data`.** `/db`, `/app/env` and `/app/Files` are `VOLUME` mount points in the upstream image, so those directories cannot be replaced — attempting it fails with `Resource busy`. Instead the databases are pointed at `/data` through environment variables, and files and subdirectories *inside* the mounts are linked out to `/data`, the volume Home Assistant persists and backs up.
 
 ## Repository layout
 
