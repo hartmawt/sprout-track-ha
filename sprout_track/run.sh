@@ -116,6 +116,8 @@ if [ -n "$INGRESS_BASE_PATH" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$INGRESS_B
     else
         echo "Sprout Track: ingress build failed, see /tmp/ingress-build.log"
         tail -5 /tmp/ingress-build.log
+        # The running build has no prefix, so the shim must not add one either.
+        INGRESS_BASE_PATH=""
     fi
 
     mv /tmp/ha-db-link /app/db 2>/dev/null || true
@@ -126,6 +128,7 @@ HTTP_LISTEN_PORT="$APP_HTTP_PORT" APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
     node /usr/local/bin/tls-proxy.js &
 
 INGRESS_PORT=8099 APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
+    INGRESS_BASE_PATH="$INGRESS_BASE_PATH" \
     node /usr/local/bin/ingress-forward.js &
 
 exec /usr/local/bin/docker-startup.sh npm start

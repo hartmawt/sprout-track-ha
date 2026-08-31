@@ -1,33 +1,95 @@
 /*
  * Passes the Home Assistant ingress port through to the app.
  *
- * The app is built with basePath set to the add-on's ingress path, so it emits
- * prefixed URLs, and the Supervisor strips that prefix before forwarding. The
- * request therefore arrives ready to serve and only needs handing to the app's
- * internal port.
+ * The app is built with basePath set to the add-on's ingress path, so routing,
+ * links and assets already carry the prefix and the Supervisor strips it back
+ * off before the request arrives here. Requests therefore need no rewriting.
+ *
+ * basePath does not cover data fetches written as absolute paths, though: a
+ * literal fetch('/api/...') resolves against the dashboard origin and reaches
+ * Home Assistant instead of the app, which answers 404. A small script is
+ * injected into HTML responses to prefix those calls at runtime. It only wraps
+ * fetch and XMLHttpRequest, leaving navigation to basePath, which Next.js
+ * understands natively.
  */
 
 const http = require('http');
 
 const PORT = Number(process.env.INGRESS_PORT) || 8099;
 const APP_PORT = Number(process.env.APP_INTERNAL_PORT) || 3001;
+const BASE_PATH = (process.env.INGRESS_BASE_PATH || '').replace(/\/$/, '');
 
-const server = http.createServer((req, res) => {
+const SHIM = `<script>(function(){
+var b=${JSON.stringify(BASE_PATH)};
+if(!b)return;
+function fix(u){
+  if(typeof u!=='string')return u;
+  if(u.charAt(0)!=='/')return u;
+  if(u.charAt(1)==='/')return u;
+  if(u.indexOf(b+'/')===0)return u;
+  return b+u;
+}
+var of=window.fetch;
+if(of){window.fetch=function(i,o){
+  try{
+    if(typeof i==='string')return of.call(this,fix(i),o);
+    if(i&&typeof i.url==='string'&&typeof Request!=='undefined'){
+      var f=fix(i.url);
+      if(f!==i.url)return of.call(this,new Request(f,i),o);
+    }
+  }catch(e){}
+  return of.call(this,i,o);
+};}
+var ox=XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open=function(){
+  var a=[].slice.call(arguments);
+  if(a.length>1)a[1]=fix(a[1]);
+  return ox.apply(this,a);
+};
+})();</script>`;
+
+function proxy(req, res) {
   const upstream = http.request(
-    { host: '127.0.0.1', port: APP_PORT, method: req.method, path: req.url, headers: req.headers },
+    {
+      host: '127.0.0.1',
+      port: APP_PORT,
+      method: req.method,
+      path: req.url,
+      headers: { ...req.headers, 'accept-encoding': 'identity' },
+    },
     (up) => {
-      res.writeHead(up.statusCode || 502, up.headers);
-      up.pipe(res);
+      const headers = { ...up.headers };
+      const type = String(headers['content-type'] || '');
+
+      if (!BASE_PATH || !type.includes('text/html')) {
+        res.writeHead(up.statusCode || 502, headers);
+        up.pipe(res);
+        return;
+      }
+
+      const chunks = [];
+      up.on('data', (c) => chunks.push(c));
+      up.on('end', () => {
+        let body = Buffer.concat(chunks).toString('utf8');
+        body = body.replace(/<head([^>]*)>/i, (m) => m + SHIM);
+        delete headers['content-length'];
+        res.writeHead(up.statusCode || 200, headers);
+        res.end(body);
+      });
     }
   );
+
   upstream.on('error', (err) => {
     if (!res.headersSent) {
       res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
     }
     res.end(`Sprout Track is still starting. Reload in a moment.\n(${err.code || err.message})`);
   });
+
   req.pipe(upstream);
-});
+}
+
+const server = http.createServer(proxy);
 
 server.on('upgrade', (req, socket) => {
   const up = http.request({
@@ -52,4 +114,6 @@ server.on('upgrade', (req, socket) => {
 });
 
 server.on('error', (err) => console.error(`[ingress] cannot bind ${PORT}: ${err.message}`));
-server.listen(PORT, '0.0.0.0', () => console.log(`[ingress] ${PORT} -> 127.0.0.1:${APP_PORT}`));
+server.listen(PORT, '0.0.0.0', () =>
+  console.log(`[ingress] ${PORT} -> 127.0.0.1:${APP_PORT}, prefixing fetch with ${BASE_PATH || '(none)'}`)
+);
