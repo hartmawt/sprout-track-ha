@@ -99,7 +99,10 @@ if [ -n "$SUPERVISOR_TOKEN" ]; then
     )
 fi
 
-STAMP="${DATA_ENV}/.ingress-base-path"
+# The stamp lives with the build rather than in /data: rebuilding the add-on
+# replaces /app/.next with the image's unprefixed build, and a stamp that
+# outlived it would skip the rebuild and serve assets the browser cannot find.
+STAMP="/app/.next/.ha-ingress-base-path"
 if [ -n "$INGRESS_BASE_PATH" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$INGRESS_BASE_PATH" ]; then
     echo "Sprout Track: building for ingress (first start, a few minutes)"
 
@@ -122,6 +125,14 @@ if [ -n "$INGRESS_BASE_PATH" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$INGRESS_B
 
     mv /tmp/ha-db-link /app/db 2>/dev/null || true
     mv /tmp/ha-files-link /app/Files 2>/dev/null || true
+fi
+
+# Trust the build itself rather than the stamp: if the prefix is missing from
+# the compiled output the browser would request assets that are not there, so
+# fall back to serving unprefixed, which at least renders.
+if [ -n "$INGRESS_BASE_PATH" ] && ! grep -rqs "hassio_ingress" /app/.next/static 2>/dev/null; then
+    echo "Sprout Track: ingress prefix missing from build; serving without it"
+    INGRESS_BASE_PATH=""
 fi
 
 HTTP_LISTEN_PORT="$APP_HTTP_PORT" APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
