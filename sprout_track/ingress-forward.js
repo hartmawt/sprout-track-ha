@@ -118,6 +118,12 @@ function proxy(req, res) {
         let body = rewriteNavigation(Buffer.concat(chunks).toString('utf8'));
         if (isHtml) body = body.replace(/<head([^>]*)>/i, (m) => m + SLUG_HELPER + SHIM);
         delete headers['content-length'];
+
+        // Next.js marks its chunks immutable for a year, so a browser holding a
+        // copy from before these rewrites would never ask for them again.
+        delete headers.etag;
+        headers['cache-control'] = 'no-store';
+
         res.writeHead(up.statusCode || 200, headers);
         res.end(body);
       });
