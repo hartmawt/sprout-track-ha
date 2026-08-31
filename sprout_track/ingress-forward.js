@@ -75,20 +75,30 @@ const NAVIGATION = /(\.location\s*\.\s*(?:href|assign|replace)\s*[=(]\s*)(["'`])
 // ingress is "api" rather than the family. Both forms are redirected to a
 // helper that skips the prefix, so the slug and every path built from it match
 // what the app sees without ingress.
-const SLUG_FROM_PATH = /location\.pathname\.split\("\/"\)(\.filter\(Boolean\)\[0\]|\[1\])/g;
-
-const SLUG_HELPER = `<script>(function(){
+// The app reads location.pathname in several places to derive its family slug,
+// and the minifier hoists it into a variable before splitting, so the reads
+// cannot be matched as a pattern. Redefining the property is what reaches them
+// all: it reports the path with the ingress prefix removed, which is what the
+// app would see served at the root.
+const PATHNAME_HELPER = `<script>(function(){
 var b=${JSON.stringify(BASE_PATH)};
-window.__haPath=function(){
-  var p=location.pathname;
-  return b&&p.indexOf(b)===0?p.slice(b.length)||'/':p;
-};
+if(!b)return;
+var d=Object.getOwnPropertyDescriptor(Location.prototype,'pathname');
+if(!d||!d.get)return;
+try{
+  Object.defineProperty(Location.prototype,'pathname',{
+    configurable:true,enumerable:d.enumerable,
+    get:function(){
+      var p=d.get.call(this);
+      return this===window.location&&p.indexOf(b)===0?(p.slice(b.length)||'/'):p;
+    },
+    set:d.set?function(v){return d.set.call(this,v)}:undefined
+  });
+}catch(e){}
 })();</script>`;
 
 function rewriteNavigation(body) {
-  return body
-    .replace(NAVIGATION, (_, prefix, quote) => `${prefix}${quote}${BASE_PATH}/`)
-    .replace(SLUG_FROM_PATH, (_, tail) => `__haPath().split("/")${tail}`);
+  return body.replace(NAVIGATION, (_, prefix, quote) => `${prefix}${quote}${BASE_PATH}/`);
 }
 
 // The Supervisor strips the ingress prefix, but the app is built and started
@@ -125,7 +135,7 @@ function proxy(req, res) {
       up.on('data', (c) => chunks.push(c));
       up.on('end', () => {
         let body = rewriteNavigation(Buffer.concat(chunks).toString('utf8'));
-        if (isHtml) body = body.replace(/<head([^>]*)>/i, (m) => m + SLUG_HELPER + SHIM);
+        if (isHtml) body = body.replace(/<head([^>]*)>/i, (m) => m + PATHNAME_HELPER + SHIM);
         delete headers['content-length'];
 
         // Next.js marks its chunks immutable for a year, so a browser holding a

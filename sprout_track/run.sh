@@ -136,6 +136,7 @@ if [ -n "$INGRESS_BASE_PATH" ] && ! grep -rqs "hassio_ingress" /app/.next/static
 fi
 
 HTTP_LISTEN_PORT="$APP_HTTP_PORT" APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
+    INGRESS_BASE_PATH="$INGRESS_BASE_PATH" \
     node /usr/local/bin/tls-proxy.js &
 
 INGRESS_PORT=8099 APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
