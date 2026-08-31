@@ -113,6 +113,15 @@ if [ -n "$INGRESS_BASE_PATH" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$INGRESS_B
     mv /app/Files /tmp/ha-files-link 2>/dev/null || true
     rm -rf /app/.next/cache
 
+    # The app reads window.location.pathname to find its family slug and to
+    # recognise its own root page. Under ingress that path carries the prefix,
+    # so the slug reads as "api" and the root check never matches, which logs
+    # the user out to a URL Home Assistant cannot route. The property cannot be
+    # patched at runtime because browsers refuse to redefine location, so the
+    # reads are given the prefix-stripped path before the build.
+    grep -rl "window\.location\.pathname" /app/app /app/src 2>/dev/null |
+        xargs -r sed -i "s#window\.location\.pathname#(window.location.pathname.startsWith('${INGRESS_BASE_PATH}')?(window.location.pathname.slice(${#INGRESS_BASE_PATH})||'/'):window.location.pathname)#g"
+
     if NEXT_BASE_PATH="$INGRESS_BASE_PATH" npm --prefix /app run build >/tmp/ingress-build.log 2>&1; then
         printf '%s' "$INGRESS_BASE_PATH" > "$STAMP"
         echo "Sprout Track: ingress build complete"

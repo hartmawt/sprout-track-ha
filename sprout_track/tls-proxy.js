@@ -39,22 +39,6 @@ function upstreamPath(url) {
   return url === '/' ? BASE_PATH : BASE_PATH + url;
 }
 
-const PATHNAME_HELPER = `<script>(function(){
-var b=${JSON.stringify(BASE_PATH)};
-if(!b)return;
-var d=Object.getOwnPropertyDescriptor(Location.prototype,'pathname');
-if(!d||!d.get)return;
-try{
-  Object.defineProperty(Location.prototype,'pathname',{
-    configurable:true,enumerable:d.enumerable,
-    get:function(){
-      var p=d.get.call(this);
-      return this===window.location&&p.indexOf(b)===0?(p.slice(b.length)||'/'):p;
-    },
-    set:d.set?function(v){return d.set.call(this,v)}:undefined
-  });
-}catch(e){}
-})();</script>`;
 
 function forward(req, res) {
   const upstream = http.request(
@@ -66,25 +50,8 @@ function forward(req, res) {
       headers: { ...req.headers, 'x-forwarded-proto': 'https' },
     },
     (up) => {
-      const headers = { ...up.headers };
-      if (!BASE_PATH || !String(headers['content-type'] || '').includes('text/html')) {
-        res.writeHead(up.statusCode || 502, headers);
-        up.pipe(res);
-        return;
-      }
-
-      const chunks = [];
-      up.on('data', (c) => chunks.push(c));
-      up.on('end', () => {
-        const body = Buffer.concat(chunks)
-          .toString('utf8')
-          .replace(/<head([^>]*)>/i, (m) => m + PATHNAME_HELPER);
-        delete headers['content-length'];
-        delete headers.etag;
-        headers['cache-control'] = 'no-store';
-        res.writeHead(up.statusCode || 200, headers);
-        res.end(body);
-      });
+      res.writeHead(up.statusCode || 502, up.headers);
+      up.pipe(res);
     }
   );
   upstream.on('error', (err) => {
