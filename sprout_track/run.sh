@@ -142,4 +142,10 @@ INGRESS_PORT=8099 APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
     INGRESS_BASE_PATH="$INGRESS_BASE_PATH" \
     node /usr/local/bin/ingress-forward.js &
 
+# next.config.ts reads NEXT_BASE_PATH when the server starts as well as when it
+# builds. Without it here the server routes as if there were no prefix while the
+# compiled assets carry one, so the client and server disagree about the path.
+export NEXT_BASE_PATH="$INGRESS_BASE_PATH"
+set_env NEXT_BASE_PATH "$INGRESS_BASE_PATH"
+
 exec /usr/local/bin/docker-startup.sh npm start
