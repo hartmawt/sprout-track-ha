@@ -7,15 +7,21 @@ arch:
   - aarch64
   - amd64
 
-# The app cannot be served through ingress: Next.js resolves basePath at build
-# time and ingress assigns a random prefix per session. Ingress is enabled only
-# so Home Assistant offers the "Show in sidebar" toggle; ingress_port serves a
-# redirect to the app's own port. Do not point ingress_port at the app.
+# The app cannot be proxied through ingress: Next.js resolves basePath at build
+# time, and its client router reads location.pathname, which cannot be rewritten
+# from outside the app. Ingress is enabled to obtain the sidebar entry, and
+# ingress_port serves a page that frames the app at its own origin.
 ingress: true
 ingress_port: 8099
 panel_icon: "mdi:baby-carriage"
 panel_title: "Sprout Track"
 panel_admin: false
+
+# Read-only access to Home Assistant's certificates. A page framed on an HTTPS
+# dashboard cannot load an HTTP source, so the app is served over HTTPS when a
+# certificate is available.
+map:
+  - ssl:ro
 
 startup: application
 boot: auto

@@ -47,13 +47,19 @@ Open the web UI at `http://<home-assistant-ip>:3000`, or use the **Open Web UI**
 
 ### The sidebar entry
 
-The add-on adds a **Sprout Track** entry to the sidebar, controlled by the **Show in sidebar** toggle on the Info page. Clicking it sends you to the app on port 3000.
+The add-on adds a **Sprout Track** entry to the sidebar, controlled by the **Show in sidebar** toggle on the Info page. It opens the app inside Home Assistant.
 
-The app is not proxied through Home Assistant. Ingress serves add-ons from a randomly generated URL prefix that changes every session, and Next.js requires its URL prefix (`basePath`) to be fixed when the app is compiled — it bakes it into the JavaScript bundles. Served through Ingress, requests for `/_next/...` and `/api/...` would go to Home Assistant instead of the add-on and nothing would load.
+The app is served over HTTPS on port 3000 using Home Assistant's own certificate from `/ssl`, and the sidebar page embeds it. Where that works:
 
-Home Assistant only offers the sidebar toggle to Ingress add-ons, so the add-on enables Ingress and serves a small page on the Ingress port that hands the browser off to port 3000. It navigates the top-level window instead of embedding the app, because browsers refuse to load an `http://` page inside an iframe on an `https://` dashboard but will follow a top-level link to one.
+| How you're connected | Result |
+| --- | --- |
+| Home network, same hostname you use for Home Assistant | Opens inside Home Assistant |
+| Home network, bare IP address | Certificate won't match — shows a link instead |
+| Remote, port 3000 not forwarded | Not reachable — shows an explanatory page |
 
-> The sidebar entry points at `http://<your-home-assistant-host>:3000`, which your browser must be able to reach. That holds on your local network, but not over a Nabu Casa remote connection — remote access needs your own reverse proxy or a VPN.
+The app is not proxied through ingress. Next.js fixes its URL prefix (`basePath`) at compile time, and rewriting URLs in a proxy cannot work either: the client router reads `location.pathname`, which a browser will not let anything override, and the app assigns `window.location.href` directly during logout and navigation. Embedding the app at its own origin avoids all of this, because every absolute URL then resolves correctly on its own.
+
+> Port 3000 is intentionally not exposed to the internet. For remote access use a VPN or your own reverse proxy — do not port-forward it, as that would publish the login page.
 
 ## Accounts and security
 
@@ -87,7 +93,7 @@ If something else on your Home Assistant machine already uses port 3000, change 
 
 **Locked out.** Three wrong PIN attempts locks your IP for 5 minutes; it clears by itself.
 
-**The sidebar entry doesn't load.** It hands off to `http://<ha-host>:3000`, which must be reachable from your browser. That won't work over a Nabu Casa remote connection.
+**The sidebar shows "cannot be shown here".** Your browser can't reach port 3000 from where you are — expected outside your home network. At home, reach Home Assistant by the hostname its certificate is issued for, not a bare IP.
 
 **Timestamps are wrong.** Set `timezone` to your local timezone and restart.
 

@@ -82,10 +82,17 @@ export LOG_DATABASE_URL="file:${DATA_DB}/baby-tracker-logs.db"
 
 echo "Sprout Track: timezone=${TIMEZONE}, data=/data"
 
-if command -v node >/dev/null 2>&1; then
-    node /usr/local/bin/ingress-redirect.js &
-else
-    echo "Sprout Track: node not found; sidebar entry will not work"
-fi
+# The app moves to an internal port so the published port can serve HTTPS: the
+# sidebar frames the app, and a frame on an HTTPS dashboard cannot load HTTP.
+APP_INTERNAL_PORT=3001
+APP_PUBLIC_PORT=3000
+set_env PORT "$APP_INTERNAL_PORT"
+export PORT="$APP_INTERNAL_PORT"
+
+TLS_LISTEN_PORT="$APP_PUBLIC_PORT" APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
+    node /usr/local/bin/tls-proxy.js &
+
+INGRESS_PORT=8099 APP_PUBLIC_PORT="$APP_PUBLIC_PORT" \
+    node /usr/local/bin/ingress-page.js &
 
 exec /usr/local/bin/docker-startup.sh npm start

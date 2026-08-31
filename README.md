@@ -74,11 +74,19 @@ The setup wizard then walks you through naming your family, choosing your own PI
 
 ### 6. Sidebar entry
 
-The add-on registers a **Sprout Track** entry in the Home Assistant sidebar, controlled by the **Show in sidebar** toggle on the add-on's Info page.
+The add-on registers a **Sprout Track** entry in the sidebar, controlled by the **Show in sidebar** toggle on the add-on's Info page. It opens the app inside Home Assistant.
 
-Clicking it sends you to the app on port 3000. It does not run *inside* Home Assistant — see [Why Ingress is not used](#why-ingress-is-not-used) for the reason — so the sidebar entry is a handoff rather than an embedded page.
+The app is served over HTTPS on port 3000 using Home Assistant's own certificate, and the sidebar page embeds it. Where that works:
 
-> **This works when you reach Home Assistant on your local network.** If you connect remotely through Nabu Casa, the sidebar entry points at a `:3000` address your browser cannot reach from outside the LAN. Remote access needs your own reverse proxy or VPN.
+| How you're connected | Result |
+| --- | --- |
+| On your home network, using the same hostname you use for Home Assistant | Opens inside Home Assistant |
+| On your home network, using a bare IP address (`192.168.x.x`) | Certificate won't match the address — shows a link instead |
+| Remotely, without port 3000 forwarded | Not reachable — shows an explanatory page |
+
+Port 3000 is deliberately **not** exposed to the internet, so remote access needs a VPN (Tailscale, WireGuard) or your own reverse proxy. Don't port-forward 3000 — it would put the login page on the public internet behind only a 6-digit PIN.
+
+If you have no certificate in `/ssl`, the app is served over plain HTTP instead. That still works on a local-only Home Assistant, but it cannot be embedded in an HTTPS dashboard.
 
 ## Accounts and security
 
@@ -110,7 +118,7 @@ The secrets in `/data/env` are generated once on first start and reused. They ar
 
 **I'm locked out.** Three wrong PIN attempts locks your IP for 5 minutes. Wait it out — the lockout clears on its own.
 
-**The sidebar entry doesn't load.** It hands off to `http://<ha-host>:3000`. That address has to be reachable from your browser, so it won't work over a Nabu Casa remote connection. Use it on your local network, or reach the app directly.
+**The sidebar entry shows "cannot be shown here".** Your browser can't reach the app on port 3000 from where you are. That's expected when connecting from outside your home network. On your home network, make sure you're reaching Home Assistant by the same hostname its certificate is issued for, not by a bare IP address.
 
 **Add-on won't start, or first run seems stuck.** Check the **Log** tab. The first start runs migrations and seeding, which is slow on low-powered hardware.
 
@@ -122,17 +130,15 @@ The secrets in `/data/env` are generated once on first start and reused. They ar
 
 **Installation fails on a Raspberry Pi 3 or similar.** Those are 32-bit (`armv7`) and are not supported; a 64-bit machine is required.
 
-## Why Ingress is not used
+## Why the app is not proxied through Ingress
 
-Home Assistant's Ingress feature serves add-ons from a randomly generated URL prefix that changes every session.
+Ingress serves add-ons from a URL prefix. Sprout Track is a Next.js application, and Next.js requires its URL prefix (`basePath`) to be fixed when the app is **compiled**, inlining it into the client bundles.
 
-Sprout Track is a Next.js application. Next.js requires its URL prefix (`basePath`) to be fixed when the app is **compiled** and inlines it into the client bundles, so it cannot adapt to a prefix only known at runtime. Served through Ingress, the app's requests for `/_next/...` and `/api/...` would resolve against the Home Assistant root and never reach the add-on. Supporting it properly would mean rewriting roughly 226 fetch calls and 87 redirects across 135+ upstream files and permanently forking the project.
+Rewriting the app's URLs in a proxy instead does not work either. Next.js's client router reads `location.pathname` to decide which route to show, and `Location.prototype.pathname` cannot be overridden in a browser — so browser back/forward would break. The app also assigns `window.location.href` directly in core flows such as logout and returning home, and those assignments cannot be intercepted at all. A proxy would produce an app that looks fine until it silently breaks.
 
-The app therefore runs on port 3000 and is not proxied through Ingress.
+So the app is served on its own port, and the sidebar page embeds it there. Because the frame loads the app at its own origin root, every absolute URL in the app resolves correctly with no rewriting. To make that embeddable on an HTTPS dashboard, the add-on serves the app over HTTPS using Home Assistant's existing certificate from `/ssl`, reloading it when it is renewed.
 
-Home Assistant only offers the **Show in sidebar** toggle to add-ons that declare `ingress: true`, so the add-on enables it and serves a small page on the Ingress port whose only job is to send the browser to port 3000. That page navigates the top-level window rather than embedding the app, because a browser will not load an `http://` page inside an iframe on an `https://` dashboard, but will follow a top-level link to one. The target address is taken from the incoming request, so nothing is hardcoded.
-
-If upstream ever adds `basePath` support, real Ingress becomes straightforward and the redirect can be dropped.
+If upstream ever adds runtime `basePath` support, true Ingress proxying becomes straightforward and this can be simplified.
 
 ## How it works
 
@@ -142,6 +148,7 @@ The add-on builds **on top of the official `sprouttrack/sprout-track` image** ra
 
 1. **Applies add-on options.** Upstream's `docker-startup.sh` sources its persisted `.env` with `set -a`, which overrides exported environment variables. Options are therefore written into that file rather than exported, while leaving the auto-generated `ENC_HASH` and `JWT_SECRET` untouched so logins and encrypted data survive restarts.
 2. **Redirects storage to `/data`.** `/db`, `/app/env` and `/app/Files` are `VOLUME` mount points in the upstream image, so those directories cannot be replaced — attempting it fails with `Resource busy`. Instead the databases are pointed at `/data` through environment variables, and files and subdirectories *inside* the mounts are linked out to `/data`, the volume Home Assistant persists and backs up.
+3. **Serves the app over HTTPS.** Next.js is moved to an internal port and a small TLS terminator using Home Assistant's certificate takes the published one, so the sidebar can embed the app on an HTTPS dashboard.
 
 ## Repository layout
 
@@ -152,6 +159,8 @@ sprout_track/
 ├── build.yaml           Base image per architecture
 ├── Dockerfile           Layers the HA entrypoint onto the upstream image
 ├── run.sh               Applies HA options, maps storage to /data
+├── tls-proxy.js         Serves the app over HTTPS using Home Assistant's cert
+├── ingress-page.js      Sidebar page that embeds the app
 └── DOCS.md              Documentation shown in the add-on's Documentation tab
 ```
 
