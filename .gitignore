@@ -1,0 +1,5 @@
+# Upstream source checkout (cloned for reference; not part of the add-on build)
+sprout-track/
+
+.DS_Store
+*.log
