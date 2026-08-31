@@ -82,6 +82,10 @@ export LOG_DATABASE_URL="file:${DATA_DB}/baby-tracker-logs.db"
 
 echo "Sprout Track: timezone=${TIMEZONE}, data=/data"
 
-node /usr/local/bin/ingress-redirect.js &
+if command -v node >/dev/null 2>&1; then
+    node /usr/local/bin/ingress-redirect.js &
+else
+    echo "Sprout Track: node not found; sidebar entry will not work"
+fi
 
 exec /usr/local/bin/docker-startup.sh npm start
