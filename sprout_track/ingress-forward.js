@@ -46,6 +46,24 @@ XMLHttpRequest.prototype.open=function(){
   if(a.length>1)a[1]=fix(a[1]);
   return ox.apply(this,a);
 };
+// Scripts, stylesheets and images are fetched by the browser from element
+// properties rather than through fetch, so the URL is corrected as it is set.
+[[HTMLScriptElement,'src'],[HTMLLinkElement,'href'],[HTMLImageElement,'src']].forEach(function(p){
+  var proto=p[0]&&p[0].prototype, name=p[1];
+  if(!proto)return;
+  var d=Object.getOwnPropertyDescriptor(proto,name);
+  if(!d||!d.set)return;
+  Object.defineProperty(proto,name,{
+    configurable:true,enumerable:d.enumerable,
+    get:function(){return d.get.call(this)},
+    set:function(v){return d.set.call(this,fix(v))}
+  });
+});
+var sa=Element.prototype.setAttribute;
+Element.prototype.setAttribute=function(n,v){
+  if((n==='src'||n==='href')&&typeof v==='string')v=fix(v);
+  return sa.call(this,n,v);
+};
 })();</script>`;
 
 function proxy(req, res) {
