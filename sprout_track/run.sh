@@ -82,20 +82,50 @@ export LOG_DATABASE_URL="file:${DATA_DB}/baby-tracker-logs.db"
 
 echo "Sprout Track: timezone=${TIMEZONE}, data=/data"
 
-# The app listens internally while port 3000 keeps serving plain HTTP, so access
-# by IP address still works. HTTPS is offered alongside it on its own port for
-# the sidebar, which cannot frame an HTTP page on an HTTPS dashboard.
 APP_INTERNAL_PORT=3001
 APP_HTTP_PORT=3000
-APP_HTTPS_PORT=3443
 set_env PORT "$APP_INTERNAL_PORT"
 export PORT="$APP_INTERNAL_PORT"
 
-HTTP_LISTEN_PORT="$APP_HTTP_PORT" HTTPS_LISTEN_PORT="$APP_HTTPS_PORT" \
-    APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
+# Next.js resolves basePath at build time, so serving the app under the ingress
+# prefix means rebuilding against it. The prefix is fixed for the life of the
+# installation, so the result is cached and only rebuilt if the prefix changes.
+INGRESS_BASE_PATH=""
+if [ -n "$SUPERVISOR_TOKEN" ]; then
+    INGRESS_BASE_PATH=$(
+        curl -fsSL -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            http://supervisor/addons/self/info 2>/dev/null |
+            jq -r '.data.ingress_entry // empty' 2>/dev/null
+    )
+fi
+
+STAMP="${DATA_ENV}/.ingress-base-path"
+if [ -n "$INGRESS_BASE_PATH" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$INGRESS_BASE_PATH" ]; then
+    echo "Sprout Track: building for ingress (first start, a few minutes)"
+
+    # Turbopack refuses to build when the project contains symlinks that leave
+    # the project root, and reuses a cache built before those links existed.
+    cp -f "$ENV_FILE" /app/.env 2>/dev/null || true
+    mv /app/db /tmp/ha-db-link 2>/dev/null || true
+    mv /app/Files /tmp/ha-files-link 2>/dev/null || true
+    rm -rf /app/.next/cache
+
+    if NEXT_BASE_PATH="$INGRESS_BASE_PATH" npm --prefix /app run build >/tmp/ingress-build.log 2>&1; then
+        printf '%s' "$INGRESS_BASE_PATH" > "$STAMP"
+        echo "Sprout Track: ingress build complete"
+    else
+        echo "Sprout Track: ingress build failed, see /tmp/ingress-build.log"
+        tail -5 /tmp/ingress-build.log
+    fi
+
+    mv /tmp/ha-db-link /app/db 2>/dev/null || true
+    mv /tmp/ha-files-link /app/Files 2>/dev/null || true
+fi
+
+HTTP_LISTEN_PORT="$APP_HTTP_PORT" APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
     node /usr/local/bin/tls-proxy.js &
 
-INGRESS_PORT=8099 APP_HTTPS_PORT="$APP_HTTPS_PORT" \
-    node /usr/local/bin/ingress-page.js &
+INGRESS_PORT=8099 APP_INTERNAL_PORT="$APP_INTERNAL_PORT" \
+    node /usr/local/bin/ingress-forward.js &
 
 exec /usr/local/bin/docker-startup.sh npm start

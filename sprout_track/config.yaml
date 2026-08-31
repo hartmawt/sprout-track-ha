@@ -7,31 +7,23 @@ arch:
   - aarch64
   - amd64
 
-# The app cannot be proxied through ingress: Next.js resolves basePath at build
-# time, and its client router reads location.pathname, which cannot be rewritten
-# from outside the app. Ingress is enabled to obtain the sidebar entry, and
-# ingress_port serves a page that frames the app at its own origin.
+# hassio_api lets the add-on read its own ingress path, which it needs because
+# Next.js resolves basePath at build time and the path is only known once the
+# add-on is installed. run.sh rebuilds the app against it on first start.
 ingress: true
 ingress_port: 8099
+hassio_api: true
 panel_icon: "mdi:baby-carriage"
 panel_title: "Sprout Track"
 panel_admin: false
-
-# Read-only access to Home Assistant's certificates. A page framed on an HTTPS
-# dashboard cannot load an HTTP source, so the app is served over HTTPS when a
-# certificate is available.
-map:
-  - ssl:ro
 
 startup: application
 boot: auto
 
 ports:
   3000/tcp: 3000
-  3443/tcp: 3443
 ports_description:
-  3000/tcp: "Sprout Track web interface (HTTP)"
-  3443/tcp: "Sprout Track web interface (HTTPS, used by the sidebar)"
+  3000/tcp: "Sprout Track web interface"
 
 # /data is the add-on's persistent volume; it is included in Home Assistant
 # backups. The databases, generated secrets, and uploads all live there.
