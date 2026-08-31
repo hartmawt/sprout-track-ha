@@ -105,9 +105,13 @@ function rewriteNavigation(body) {
 // with it as its basePath, so it only routes prefixed paths. Restoring the
 // prefix here keeps the path the app receives identical to the one the browser
 // shows, which is what lets usePathname and the route params agree.
+// The app treats the prefix itself as its root and redirects the trailing-slash
+// form to it. Appending "/" for the root would bounce that redirect back through
+// the Supervisor, which strips the prefix again, so the two would loop.
 function upstreamPath(url) {
   if (!BASE_PATH) return url;
-  return url.startsWith(BASE_PATH) ? url : BASE_PATH + url;
+  if (url.startsWith(BASE_PATH)) return url;
+  return url === '/' ? BASE_PATH : BASE_PATH + url;
 }
 
 function proxy(req, res) {

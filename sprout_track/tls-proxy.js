@@ -36,7 +36,7 @@ const BASE_PATH = (process.env.INGRESS_BASE_PATH || '').replace(/\/$/, '');
 
 function upstreamPath(url) {
   if (!BASE_PATH || url.startsWith(BASE_PATH)) return url;
-  return BASE_PATH + url;
+  return url === '/' ? BASE_PATH : BASE_PATH + url;
 }
 
 const PATHNAME_HELPER = `<script>(function(){
