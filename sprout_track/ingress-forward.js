@@ -91,13 +91,22 @@ function rewriteNavigation(body) {
     .replace(SLUG_FROM_PATH, (_, tail) => `__haPath().split("/")${tail}`);
 }
 
+// The Supervisor strips the ingress prefix, but the app is built and started
+// with it as its basePath, so it only routes prefixed paths. Restoring the
+// prefix here keeps the path the app receives identical to the one the browser
+// shows, which is what lets usePathname and the route params agree.
+function upstreamPath(url) {
+  if (!BASE_PATH) return url;
+  return url.startsWith(BASE_PATH) ? url : BASE_PATH + url;
+}
+
 function proxy(req, res) {
   const upstream = http.request(
     {
       host: '127.0.0.1',
       port: APP_PORT,
       method: req.method,
-      path: req.url,
+      path: upstreamPath(req.url || '/'),
       headers: { ...req.headers, 'accept-encoding': 'identity' },
     },
     (up) => {
