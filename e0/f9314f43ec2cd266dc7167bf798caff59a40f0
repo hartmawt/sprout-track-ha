@@ -1,0 +1,28 @@
+.gitignore
+  h_fba739561af9bd 1-5
+README.md
+  h_fba739561af9bd 1-148
+repository.yaml
+  h_fba739561af9bd 1-3
+sprout_track/DOCS.md
+  h_fba739561af9bd 1-90
+sprout_track/Dockerfile
+  h_fba739561af9bd 1-11
+sprout_track/build.yaml
+  h_fba739561af9bd 1-3
+sprout_track/config.yaml
+  h_fba739561af9bd 1-37
+sprout_track/run.sh
+  h_fba739561af9bd 1-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "e0f9314f43ec2cd266dc7167bf798caff59a40f0",
+  "prompts": {},
+  "humans": {
+    "h_fba739561af9bd": {
+      "author": "Tyler Hartman <tyhartma@cisco.com>"
+    }
+  }
+}
