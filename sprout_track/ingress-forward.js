@@ -66,6 +66,15 @@ Element.prototype.setAttribute=function(n,v){
 };
 })();</script>`;
 
+// location.href navigates on assignment and its setter is non-configurable,
+// so the runtime shim cannot see it. Matches only slash-prefixed string
+// literals, so variables and external URLs stay untouched.
+const NAVIGATION = /(\.location\s*\.\s*(?:href|assign|replace)\s*[=(]\s*)(["'`])\/(?!\/)/g;
+
+function rewriteNavigation(body) {
+  return body.replace(NAVIGATION, (_, prefix, quote) => `${prefix}${quote}${BASE_PATH}/`);
+}
+
 function proxy(req, res) {
   const upstream = http.request(
     {
@@ -78,8 +87,10 @@ function proxy(req, res) {
     (up) => {
       const headers = { ...up.headers };
       const type = String(headers['content-type'] || '');
+      const isHtml = type.includes('text/html');
+      const isScript = type.includes('javascript');
 
-      if (!BASE_PATH || !type.includes('text/html')) {
+      if (!BASE_PATH || (!isHtml && !isScript)) {
         res.writeHead(up.statusCode || 502, headers);
         up.pipe(res);
         return;
@@ -88,8 +99,8 @@ function proxy(req, res) {
       const chunks = [];
       up.on('data', (c) => chunks.push(c));
       up.on('end', () => {
-        let body = Buffer.concat(chunks).toString('utf8');
-        body = body.replace(/<head([^>]*)>/i, (m) => m + SHIM);
+        let body = rewriteNavigation(Buffer.concat(chunks).toString('utf8'));
+        if (isHtml) body = body.replace(/<head([^>]*)>/i, (m) => m + SHIM);
         delete headers['content-length'];
         res.writeHead(up.statusCode || 200, headers);
         res.end(body);
